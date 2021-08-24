@@ -1,10 +1,11 @@
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "./ERC721.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract ColoredGrids is ERC721 {
+contract ColoredGrids is ERC721, Ownable {
 	// The cost in ether to generate a new grid
-	uint256 public mintCost = 0.01 ether;
+	uint256 public mintCost;
 	// Mapping from token ID to grid data
 	mapping(uint256 => uint64) public gridData;
 	// Mapping from owner to array of owned tokenIds
@@ -17,7 +18,8 @@ contract ColoredGrids is ERC721 {
 		string memory name_, 
 		string memory symbol_
 	) ERC721(name_, symbol_) {
-		// Nothing needs to be done in the cunstructor
+		// The default mint cost is 0.01 ether
+		mintCost = 10000000000000000;
 	}
  	
 	/**
@@ -33,11 +35,27 @@ contract ColoredGrids is ERC721 {
 		_owners[tokenId] = to;
 		
 		// Generate the random number for `gridData`
-		gridData[tokenId] = uint64(uint256(keccak256(abi.encodePacked(block.timestamp, msg.sender, tokenId))));
+		gridData[tokenId] = _generateGridData(tokenId);
 		// Update `ownedTokens` to reflect the newly minted token
 		ownedTokens[to].push(tokenId);
 
 		emit Transfer(address(0), to, tokenId);
+	}
+
+	/**
+	 * @dev Generates a random dataset to be used as grid data 
+	 * @param tokenId used during the random number generation to prevent two grids being on the same block having the same value
+	 * @return uint64 value of length 16 with no zeroes
+	 */
+	function _generateGridData(uint256 tokenId) internal view returns (uint64) {
+		uint64 newGridData = 0;
+		uint i;
+		// `gridData` cannot contain zeroes, so we randomly generate values between 1 and 9 and add to `newGridData`
+		for(i = 0; i < 16; i++) {
+			// `i` is used as nonce to get a new value every time
+			newGridData += uint64((1 + (uint256(keccak256(abi.encodePacked(block.timestamp, msg.sender, tokenId, i))) % 9)) * (10 ** i));
+		}
+		return newGridData;
 	}
 
 	/**
@@ -49,14 +67,28 @@ contract ColoredGrids is ERC721 {
 	 * Refer to project summary PDF for explanation of the math used in this function
 	 */
 	function _changeSubGrid(uint256 tokenId, uint64 subGridId, uint64 subGridTop, uint64 subGridBottom) internal {
+		// Change the top two values in the subgrid
+		_changeGridData(tokenId, subGridId, subGridTop);
+		// Change the bottom two values in the subgrid
+		_changeGridData(tokenId, subGridId - 4, subGridBottom);
+	}
+
+	/**
+	 * @dev Changes out two digits at `identifier` with `newValue`
+	 * @param tokenId The id of the token that is being changed
+	 * @param identifier The identifier for the slots that are being changed on the grid
+	 * @param newValue the new value that is going to replace the existing value at `identifier`
+	 * Refer to project summary PDF for explanation of subgrid identifiers
+	 */
+	function _changeGridData(uint256 tokenId, uint64 identifier, uint newValue) internal {
 		// Load the existing grid data
 		uint64 gridDataTemp = gridData[tokenId];
-		// Update the top of the subGrid
-		gridDataTemp = uint64(((gridDataTemp/(10**subGridId))*(10**subGridId))+(subGridTop*(10**(subGridId-2)))+(gridDataTemp%(10**(subGridId-2))));
-		// Update the bottom of the subgrid
-		gridDataTemp = uint64((gridDataTemp/(10**(subGridId-4)))+(subGridBottom*(10**(subGridId-6)))+(gridDataTemp%(10**(subGridId-6))));
-		// Save the new gridData
-		gridData[tokenId] = gridDataTemp;
+		// Calculate parts of the new grid data
+		uint64 rightSide = uint64((gridDataTemp / (10**identifier)) * (10 ** identifier));
+		uint64 middle = uint64(newValue * (10 ** (identifier - 2)));
+		uint64 leftSide = uint64(gridDataTemp % (10 ** (identifier - 2)));
+		// Combine the parts together and update `gridData`
+		gridData[tokenId] = rightSide + middle + leftSide;
 	}	
 
 	/**
@@ -68,6 +100,11 @@ contract ColoredGrids is ERC721 {
 		return gridData[tokenId];
 	}
 
+	/**
+	 * @dev Returns tokenIds that belong to `user`
+	 * @param user The address being queried
+	 * @return uint256[] containing all tokenIds belonging to `user`
+	 */
 	function getOwnedTokens(address user) public view returns (uint256[] memory) {
 		return ownedTokens[user];
 	}
@@ -81,5 +118,10 @@ contract ColoredGrids is ERC721 {
 		_safeMint(msg.sender, randTokenId);
 	}
 
-	// TODO: Function to set `mintCost`.  Mintcost should be public so people can know about it
+	/**
+	 * @dev Owner can set a new mint cost for generating grids
+	 */
+	function setMintCost(uint256 newMintCost) public onlyOwner() {
+		mintCost = newMintCost;
+	}	
 }
