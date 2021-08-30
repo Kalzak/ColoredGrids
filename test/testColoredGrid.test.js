@@ -31,8 +31,32 @@ contract("ColoredGrid", (accounts) => {
 	});
 
 	it("setMintCost can only be called by owner", async() => {
-		const truffleAssert = require('truffle-assertions');	
 		const instance = await ColoredGrid.deployed();
+		const truffleAssert = require('truffle-assertions');	
 		await truffleAssert.reverts(instance.setMintCost(5000000000000000, {from: accounts[1]}), "Ownable: caller is not the owner");
+	});
+
+	it("generateGrid creates gridData that is always of length 16", async() => {
+		const instance = await ColoredGrid.deployed();
+		let ownedGrids = await instance.getOwnedTokens(accounts[0]);
+		let tokenId = await BigInt(ownedGrids[0]);
+		let gridData = await instance.getGridData(tokenId.toString());
+		assert.equal(gridData.toString().length, 16, "gridData is not 16 digits");
+	});
+
+	it("generateGrid creates gridData that does not contain zeroes", async() => {
+		const instance = await ColoredGrid.deployed();
+		let ownedGrids = await instance.getOwnedTokens(accounts[0]);
+		let tokenId = await BigInt(ownedGrids[0]);
+		let gridData = await instance.getGridData(tokenId.toString());
+		assert.equal(gridData.toString().includes("0"), false, "gridData is not 16 digits");
+	});
+
+	it("getSubgridData returns valid data (between 11 and 99)", async() => {
+		const instance = await ColoredGrid.deployed();
+		let ownedGrids = await instance.getOwnedTokens(accounts[0]);
+		let tokenId = await BigInt(ownedGrids[0]);
+		let subgridData = await instance.getSubgridData(tokenId.toString(), 11);
+		assert.equal(subgridData[0].toNumber() > 11 && subgridData[0].toNumber() < 99, true, "invalid return value");
 	});
 });
