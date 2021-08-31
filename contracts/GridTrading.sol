@@ -44,7 +44,7 @@ contract GridTrading is ColoredGrids {
 		uint256 tradeId = uint256(keccak256(abi.encodePacked(msg.sender, recipient)));
 		// Create the trade object
 		Trade memory newTrade = Trade(tradeId, msg.sender, recipient, subgridId, senderGrid, recipientGrid, msg.value);
-		// Check that there is not an existing sent from msg.sender to recipient
+		// Check that there is not an existing trade send to the same recipient
 		uint256[] storage senderOutgoingTrades = outgoingTrades[msg.sender];
 		uint256 i = 0;
 		bool existingTrade = false;
@@ -63,39 +63,120 @@ contract GridTrading is ColoredGrids {
 		trades[tradeId] = newTrade;
 	}
 
-	//TODO Check for re-entrancy attacks
+	/**
+	 * @dev An address that has sent a trade offer is able to withdraw the trade with this function
+	 * @param tradeId the ID of the trade that is to be withdrawn
+	 */
 	function withdrawTradeOffer(uint256 tradeId) public {
 		// Get the trade object
 		Trade memory tradeObject = trades[tradeId];
 		// Check that msg.sender is the creator of the trade
 		require(msg.sender == tradeObject.sender, "You are not the creator of the trade");
-		// Remove the trade from the recipients address
-		uint256[] storage recipientTrades = incomingTrades[tradeObject.recipient];
-		uint256 i;
-		bool found = false;
-		while(i < recipientTrades.length && found == false) {
-			if(recipientTrades[i] == tradeObject.tradeId) {
-				delete recipientTrades[i];
-				found = true;
-			}
-			i++;
-		}		
-		require(found == true, "Trade does not exist");
-		// Remove the trade from the senders address
-		uint256[] storage senderTrades = outgoingTrades[tradeObject.sender];
-		found = false;
-		while(i < senderTrades.length && found == false) {
-			if(senderTrades[i] == tradeObject.tradeId) {
-				delete recipientTrades[i];
-				found = true;
-			}
-			i++;
-		}		
-		require(found == true, "Trade does not exist");
-		// TODO: Remove trade from trades mapping
-		// Return ether to the user
-		payable(msg.sender).call{value: tradeObject.senderOffer}("");
+		_removeTradeOffer(tradeId);
 	}
 
+	function _removeTradeOffer(uint256 tradeId) internal {
+		// Get the trade object
+		Trade memory tradeObject = trades[tradeId];
+		// Remove the trade from the recipients address
+		bool deleted = removeTradeFromArray(incomingTrades[tradeObject.recipient], tradeId);
+		// Ensure that the tradeId was deleted
+		require(deleted == true, "Trade does not exist in recipient array");
+		// Remove the trade from the senders address
+		deleted = removeTradeFromArray(outgoingTrades[tradeObject.sender], tradeId);
+		// Ensure that the tradeId was deleted
+		require(deleted == true, "Trade does not exist in sender array");
+		// Remove trade from trades mapping
+		delete trades[tradeId];
+		// Return ether to the user
+		(bool sent,) = payable(msg.sender).call{value: tradeObject.senderOffer}("");
+	}
+
+	/**
+	 * @dev Removes an element that contains tradeId in the array and shuffled the array
+	 * @param array The array to have data removed from
+	 * @param tradeId The trade ID to be removed
+	 */
+	function removeTradeFromArray(uint256[] storage array, uint256 tradeId) internal returns (bool) {
+		bool found = false;
+		uint256 i = 0;
+		// Iterate through each item in the array until the tradeId is found
+		while(i < array.length && found == false) {
+			if(array[i] == tradeId) {
+				found = true;
+				// If the array is size 1 then just pop
+				if(array.length == 1) {
+					array.pop();
+				// Otherwise move the last element into its place and pop
+				} else {
+					array[i] = array[array.length - 1];
+					array.pop();
+				}
+			}	
+			i++;
+		}
+		// Return whether the item has been deleted
+		return found;
+	}
+
+	/**
+	 * @dev Accepts a trade and exchanges grids/subgrids/ether
+	 */
+	function acceptTradeOffer(uint256 tradeId) public {
+		// Get the trade object
+		Trade memory tradeObject = trades[tradeId];
+		// Check that msg.sender is the recipient of the trade
+		require(tradeObject.recipient == msg.sender, "msg.sender is not the recipient of the trade");
+		// Different logic if it is a grid trade or a subgrid trade
+		if(tradeObject.subgridId == 0) {
+			// Exchange grids
+			_approve(address(this), tradeObject.senderGrid);
+			_transfer(tradeObject.sender, tradeObject.recipient, tradeObject.senderGrid);
+			_transfer(tradeObject.recipient, tradeObject.sender, tradeObject.recipientGrid);
+		} else {
+			uint8 subgridId = tradeObject.subgridId;
+			// Make sure that the subgridId is valid
+			bool subgridIdIsValid = false;
+			uint8[9] memory validSubgridIds = [6,7,8,10,11,12,14,15,16];
+			uint i = 0;
+			while(i < validSubgridIds.length && subgridIdIsValid == false) {
+				if(validSubgridIds[i] == subgridId) {
+					subgridIdIsValid = true;
+				}
+			}
+			require(subgridIdIsValid = true, "SubgridId provided is invalid");
+			// Load subgridData
+			uint8[2] memory senderSubgridData = getSubgridData(tradeObject.senderGrid, subgridId);
+			uint8[2] memory recipientSubgridData = getSubgridData(tradeObject.recipientGrid, subgridId);
+			// Swap subgrids
+			_changeSubgrid(tradeObject.senderGrid, subgridId, recipientSubgridData[0], recipientSubgridData[1]);
+			_changeSubgrid(tradeObject.recipientGrid, subgridId, senderSubgridData[0], senderSubgridData[1]);
+		}
+		_removeTradeOffer(tradeId);
+		// Settle ether payments
+		(bool sent,) = payable(tradeObject.recipient).call{value: tradeObject.senderOffer}("");
+		// TODO Cancel all incoming/outgoing trades that depend on a grid that was involved in this trade 
+	}
+
+	/**
+	 * @dev Returns an array of tradeIds for incoming trades to the address `account`
+	 */
+	function getIncomingTrades(address account) public view returns (uint256[] memory){
+		return incomingTrades[account];
+	}
+
+	/**
+	 * @dev Returns an array of tradeIds for outgoing trades to the address `account`
+	 */
+	function getOutgoingTrades(address account) public view returns (uint256[] memory){
+		return outgoingTrades[account];
+	}
+
+	/**
+	 * @dev Returns a trade with tradeId
+	 */
+	function getTradeDetails(uint256 tradeId) public view returns (Trade memory) {
+		return trades[tradeId];
+	}
 
 }
