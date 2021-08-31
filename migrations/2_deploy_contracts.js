@@ -1,5 +1,7 @@
 var ColoredGrids = artifacts.require("ColoredGrids");
+var GridTrading = artifacts.require("GridTrading");
 
 module.exports = function(deployer) {
-	deployer.deploy(ColoredGrids, "ColoredGrid", "CG");
+	deployer.deploy(ColoredGrids, "ColoredGrids", "CG")
+	deployer.deploy(GridTrading, "ColoredGrids", "CG");
 }
