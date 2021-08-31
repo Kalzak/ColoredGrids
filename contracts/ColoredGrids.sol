@@ -66,7 +66,7 @@ contract ColoredGrids is ERC721, Ownable {
 	 * @param subGridBottom the bottom value of the subgrid concatenated to one number
 	 * Refer to project summary PDF for explanation of the math used in this function
 	 */
-	function _changeSubGrid(uint256 tokenId, uint64 subGridId, uint64 subGridTop, uint64 subGridBottom) internal {
+	function _changeSubgrid(uint256 tokenId, uint64 subGridId, uint64 subGridTop, uint64 subGridBottom) internal {
 		// Change the top two values in the subgrid
 		_changeGridData(tokenId, subGridId, subGridTop);
 		// Change the bottom two values in the subgrid
@@ -100,6 +100,19 @@ contract ColoredGrids is ERC721, Ownable {
 		return gridData[tokenId];
 	}
 
+
+	/**
+	 * @dev Returns subgrid data for a given tokenId
+	 */
+	function getSubgridData(uint256 tokenId, uint8 subgridId) public view returns(uint8[2] memory) {
+		uint8[2] memory subgridData;
+		uint64 gridDataTemp = getGridData(tokenId);
+		// Calculate the values based on the subgridId
+		subgridData[0] = uint8(((gridDataTemp / (10 ** (subgridId - 1)) % 10) * 10) + ((gridDataTemp / (10 ** (subgridId - 2))) % 10));
+		subgridData[1] = uint8(((gridDataTemp / (10 ** (subgridId - 5)) % 10) * 10) + ((gridDataTemp / (10 ** (subgridId - 6))) % 10));
+		return subgridData;
+	}
+
 	/**
 	 * @dev Returns tokenIds that belong to `user`
 	 * @param user The address being queried
@@ -114,7 +127,7 @@ contract ColoredGrids is ERC721, Ownable {
 	 */
 	function generateGrid() public payable {
 		require(msg.value >= mintCost, "msg.value is less than the cost to generate a new grid");
-		uint256 randTokenId = uint256(keccak256(abi.encodePacked(block.timestamp, msg.sender)));
+		uint256 randTokenId = uint256(keccak256(abi.encodePacked(block.timestamp, msg.sender, ownedTokens[msg.sender].length )));
 		_safeMint(msg.sender, randTokenId);
 	}
 
