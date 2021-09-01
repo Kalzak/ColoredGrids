@@ -79,12 +79,15 @@ contract("GridTrading", (accounts) => {
 
 	it("acceptTradeOffer on a grid swaps the grids between users", async() => {
 		let instance = await GridTrading.deployed();
-		// Get the two tradeIds that will be exchanged
+	
+		let a0Ts = await getOwnedTokens(instance, accounts[0]);
+		let a1Ts = await getOwnedTokens(instance, accounts[1]);
+		let a2Ts = await getOwnedTokens(instance, accounts[2]);
+		// Get the two tokenIds that will be exchanged
 		let a0tokenIds = await instance.getOwnedTokens(accounts[0]);
 		let a1tokenIds = await instance.getOwnedTokens(accounts[1]);
 		let a0token0IdBN = BigInt(a0tokenIds[0]);
 		let a1token0IdBN = BigInt(a1tokenIds[1]);
-
 		// Start a trade
 		await instance.sendTradeOffer(accounts[1], 0, a0token0IdBN.toString(), a1token0IdBN.toString(), {from: accounts[0]});
 		// Get the tradeId for the trade that was just made
@@ -104,7 +107,54 @@ contract("GridTrading", (accounts) => {
 	});
 
 	it("acceptTradeOffer cancels other incoming and outgoing tradeoffers that depend on the grid that was moved", async() => {
-		assert.equal(true, false, "Not implemented (TODO)");
+		let instance = await GridTrading.deployed();
+		// Get tokenIds ofr accounts to build trades
+		let a0Ts = await getOwnedTokens(instance, accounts[0]);
+		let a1Ts = await getOwnedTokens(instance, accounts[1]);
+		let a2Ts = await getOwnedTokens(instance, accounts[2]);
+		// Construct trades
+		await instance.sendTradeOffer(accounts[1], 0, a0Ts[0], a1Ts[0], {from: accounts[0]});
+		await instance.sendTradeOffer(accounts[1], 0, a2Ts[0], a1Ts[0], {from: accounts[2]});
+		// Accept one of the tradeOffers
+		let a1Its = await getIncomingTrades(instance, accounts[1]);
+		let a1It0 = await instance.getTradeDetails(a1Its[0]);
+		await instance.acceptTradeOffer(a1Its[0], {from: accounts[1]});
+		// Check if the other trade was cancelled due to grid tokenId dependency
+		a1Its = await getIncomingTrades(instance, accounts[1]);
+		assert.equal(a1Its.length, 0, "Existing trade that had a grid tokenID dependency was not removed");
 	});
 
 });
+
+async function getOwnedTokens(instance, account) {
+	let tokensUnformatted = await instance.getOwnedTokens(account);
+	let tokensFormatted = new Array();
+	let i;
+	for(i = 0; i < tokensUnformatted.length; i++) {
+		tokensFormatted.push(BigInt(tokensUnformatted[i]).toString());
+	}
+	return tokensFormatted;
+}
+
+async function getIncomingTrades(instance, account) {
+	let tradesUnformatted = await instance.getIncomingTrades(account);
+	let tradesFormatted = new Array();
+	let i;
+	for(i = 0; i < tradesUnformatted.length; i++) {
+		tradesFormatted.push(BigInt(tradesUnformatted[i]).toString());
+	}
+	return tradesFormatted;
+}
+
+async function getOutgoingTrades(instance, account) {
+	let tradesUnformatted = await instance.getOutgoingTrades(account);
+	let tradesFormatted = new Array();
+	let i;
+	for(i = 0; i < tradesUnformatted.length; i++) {
+		tradesFormatted.push(BigInt(tradesUnformatted[i]).toString());
+	}
+	return tradesFormatted;
+}
+
+
+

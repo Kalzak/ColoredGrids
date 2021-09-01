@@ -130,9 +130,12 @@ contract GridTrading is ColoredGrids {
 		// Different logic if it is a grid trade or a subgrid trade
 		if(tradeObject.subgridId == 0) {
 			// Exchange grids
-			_approve(address(this), tradeObject.senderGrid);
 			_transfer(tradeObject.sender, tradeObject.recipient, tradeObject.senderGrid);
 			_transfer(tradeObject.recipient, tradeObject.sender, tradeObject.recipientGrid);
+			_removeTokenFromAddress(tradeObject.sender, tradeObject.senderGrid);
+			_removeTokenFromAddress(tradeObject.recipient, tradeObject.recipientGrid);
+			_addTokenToAddress(tradeObject.sender, tradeObject.recipientGrid);
+			_addTokenToAddress(tradeObject.recipient, tradeObject.senderGrid);
 		} else {
 			uint8 subgridId = tradeObject.subgridId;
 			// Make sure that the subgridId is valid
@@ -155,7 +158,30 @@ contract GridTrading is ColoredGrids {
 		_removeTradeOffer(tradeId);
 		// Settle ether payments
 		(bool sent,) = payable(tradeObject.recipient).call{value: tradeObject.senderOffer}("");
-		// TODO Cancel all incoming/outgoing trades that depend on a grid that was involved in this trade 
+		// Cancel all incoming/outgoing trades that depend on a grid that was involved in this trade 
+		removeTradeByTokenId(getIncomingTrades(tradeObject.sender), tradeObject.senderGrid);
+		removeTradeByTokenId(getOutgoingTrades(tradeObject.sender), tradeObject.senderGrid);
+		removeTradeByTokenId(getIncomingTrades(tradeObject.recipient), tradeObject.recipientGrid);
+		removeTradeByTokenId(getOutgoingTrades(tradeObject.recipient), tradeObject.recipientGrid);
+	}
+	
+	/**
+	 * @dev Looks through an array of trade IDs and deletes the trade if it contains tokenId as a senderGrid or recipientGrid
+	 * @param tradeList An array of trades IDs
+	 * @param tradeId The target token ID to be removed
+	 */
+	function removeTradeByTokenId(uint256[] memory tradeList, uint256 tradeId) internal {
+		uint i;
+		// For every tradeId in the array tradeList
+		for(i = 0; i < tradeList.length; i++) {
+			// Load the trade object
+			Trade memory tradeObject = getTradeDetails(tradeList[i]);
+			// Check if the trade contains tokenId as a senderGrid or recieverGrid
+			if(tradeObject.senderGrid == tradeId || tradeObject.recipientGrid == tradeId) {
+				// Remove the trade
+				_removeTradeOffer(tradeList[i]);
+			}
+		}
 	}
 
 	/**

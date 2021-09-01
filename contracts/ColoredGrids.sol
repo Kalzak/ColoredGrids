@@ -122,6 +122,29 @@ contract ColoredGrids is ERC721, Ownable {
 		return ownedTokens[user];
 	}
 
+	function _removeTokenFromAddress(address targetAddress, uint256 tokenId) internal {
+		// Get array of owned tokenIds
+		uint256[] storage ownedTokensTemp = ownedTokens[targetAddress];
+		uint i = 0;
+		bool found = false;
+		while(i < ownedTokensTemp.length && found == false) {
+			if(ownedTokensTemp[i] == tokenId) {
+				found = true;
+				if(ownedTokensTemp.length == 1) {
+					ownedTokensTemp[i] = ownedTokensTemp[ownedTokensTemp.length - 1];
+					ownedTokensTemp.pop();
+				} else {
+					ownedTokensTemp.pop();
+				}
+			}
+			i++;
+		}
+	}
+
+	function _addTokenToAddress(address targetAddress, uint256 tokenId) internal {
+		ownedTokens[targetAddress].push(tokenId);
+	}
+
 	/**
 	 * @dev Mints a new token to `msg.sender`'s address if msg.value >= `mintCost` 
 	 */
