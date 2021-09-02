@@ -119,8 +119,8 @@ contract("GridTrading", (accounts) => {
 		let a1It = await getIncomingTrades(instance, accounts[1]);
 		await instance.acceptTradeOffer(a1It[0], {from: accounts[1]});
 		// Get new owned tokens and check if they have been swapped
-		let a0T_new = await getOwnedTokens(instance. accounts[0]);
-		let a1T_new = await getOwnedTokens(instance. accounts[1]);
+		let a0T_new = await getOwnedTokens(instance, accounts[0]);
+		let a1T_new = await getOwnedTokens(instance, accounts[1]);
 		let a0T0_prev_owner = await instance.ownerOf(a0T_prev[0]); 
 		let a0T0_new_owner = await instance.ownerOf(a0T_new[0]);
 		let a1T0_prev_owner = await instance.ownerOf(a1T_prev[0]);
