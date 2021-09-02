@@ -86,7 +86,7 @@ contract("GridTrading", (accounts) => {
 
 	});
 
-	it("acceptTradeOffer on a grid swaps the grids between users", async() => {
+	it("acceptTradeOffer with grid swaps ownership of grids", async() => {
 		let instance = await GridTrading.deployed();
 		// Get the tokenIds that will be exchanged	
 		let a0T = await getOwnedTokens(instance, accounts[0]);
@@ -108,9 +108,30 @@ contract("GridTrading", (accounts) => {
 		assert.equal(t0OwnerAfter, t1OwnerBefore, "Grids did not transfer");
 	});
 
+	it("acceptTradeOffer with grid changes involved addresses ownedTokens[] data", async() =>{
+		let instance = await GridTrading.deployed();
+		// Get tokenIds of accounts to build trade
+		let a0T_prev = await getOwnedTokens(instance, accounts[0]);
+		let a1T_prev = await getOwnedTokens(instance, accounts[1]);
+		// Construct the trade
+		await instance.sendTradeOffer(accounts[1], 0, a0T_prev[0], a1T_prev[0], {from: accounts[0]});
+		// Accept the trade
+		let a1It = await getIncomingTrades(instance, accounts[1]);
+		await instance.acceptTradeOffer(a1It[0], {from: accounts[1]});
+		// Get new owned tokens and check if they have been swapped
+		let a0T_new = await getOwnedTokens(instance. accounts[0]);
+		let a1T_new = await getOwnedTokens(instance. accounts[1]);
+		let a0T0_prev_owner = await instance.ownerOf(a0T_prev[0]); 
+		let a0T0_new_owner = await instance.ownerOf(a0T_new[0]);
+		let a1T0_prev_owner = await instance.ownerOf(a1T_prev[0]);
+		let a1T0_new_owner = await instance.ownerOf(a1T_new[0]);
+		assert.equal(a0T0_prev_owner, a1T0_new_owner, "Owner is not the expected owner");
+		assert.equal(a1T0_prev_owner, a0T0_new_owner, "Owner is not the expected owner");
+	});
+
 	it("acceptTradeOffer cancels other incoming and outgoing tradeoffers that depend on the grid that was moved", async() => {
 		let instance = await GridTrading.deployed();
-		// Get tokenIds ofr accounts to build trades
+		// Get tokenIds of accounts to build trades
 		let a0T = await getOwnedTokens(instance, accounts[0]);
 		let a1T = await getOwnedTokens(instance, accounts[1]);
 		let a2T = await getOwnedTokens(instance, accounts[2]);
