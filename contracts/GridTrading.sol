@@ -166,6 +166,43 @@ contract GridTrading is ColoredGrids {
 	}
 	
 	/**
+	 * @dev Counters a trade offer that was sent to msg.sender by changing the eth amount
+	 * @param tradeId The trade ID of the incoming trade to be modified
+	 * @param newOfferValue The new amount of ether that the initial trade sender has to offer
+	 */
+	function sendCounterTrade(uint256 tradeId, uint256 newOfferValue) public {
+		// Find the trade in the users incomingTrades
+		uint256 i = 0;
+		bool found = false;
+		uint256[] storage incomingTradesTemp = incomingTrades[msg.sender];
+		while(i < incomingTradesTemp.length && found == false) {
+			if(incomingTradesTemp[i] == tradeId) {
+				found = true;
+			} else {
+				i++;	
+			}
+		}
+		require(found == true, "Given tradeId is not in your list of incomingTrades");
+		Trade storage tradeObject = trades[tradeId];
+		// Require that the new offeramount is higher than the existing offer amount
+		require(newOfferValue > tradeObject.senderOffer, "You cannot change the offer to be less than the original amount");
+		tradeObject.senderOffer = newOfferValue;
+		tradeObject.recipient = tradeObject.sender;
+		tradeObject.sender = msg.sender;
+	}
+
+	/**
+	 * @dev Declines a trade offer
+	 */
+	function declineTradeOffer(uint256 tradeId) public {
+		// Get the trade object
+		Trade memory tradeObject = trades[tradeId];
+		// Check that msg.sender is the creator of the trade
+		require(msg.sender == tradeObject.recipient, "You are not the recipient of the trade");
+		_removeTradeOffer(tradeId);
+	}
+
+	/**
 	 * @dev Looks through an array of trade IDs and deletes the trade if it contains tokenId as a senderGrid or recipientGrid
 	 * @param tradeList An array of trades IDs
 	 * @param tradeId The target token ID to be removed

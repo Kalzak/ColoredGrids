@@ -146,6 +146,38 @@ contract("GridTrading", (accounts) => {
 		a1It = await getIncomingTrades(instance, accounts[1]);
 		assert.equal(a1It.length, 0, "Existing trade that had a grid tokenID dependency was not removed");
 	});
+	
+	it("declineTradeOffer closes the trade", async() => {
+		const instance = await GridTrading.deployed();
+		// Get tokenIds for grids on accounts
+		let a0T = await getOwnedTokens(instance, accounts[0]);
+		let a1T = await getOwnedTokens(instance, accounts[1]);
+		// Start a trade
+		await instance.sendTradeOffer(accounts[1], 0, a0T[0], a1T[0], {from: accounts[0]});
+		let a1It = await getIncomingTrades(instance, accounts[1]);
+		// Decline the trade
+		await instance.declineTradeOffer(a1It[0], {from: accounts[1]});
+		// Update incomingTrades to check if it has been removed
+		a1It = await getIncomingTrades(instance, accounts[1]);
+		assert.equal(a1It.length, 0, "Declining the trade offer did not remove the trade");
+	});
+
+	it("counterTradeOffer changes the trade", async() => {
+		const instance = await GridTrading.deployed();
+		// Get tokenIds for grids on accounts
+		let a0T = await getOwnedTokens(instance, accounts[0]);
+		let a1T = await getOwnedTokens(instance, accounts[1]);
+		// Start a trade
+		await instance.sendTradeOffer(accounts[1], 0, a0T[0], a1T[0], {from: accounts[0]});
+		// Get the tradeId
+		let a1It = await getIncomingTrades(instance, accounts[1]);
+		// Have the recipient send a counterOffer
+		await instance.sendCounterTrade(a1It[0], '100000000000000000', {from: accounts[1]});
+		// Get the trade object
+		let tradeObject = await instance.getTradeDetails(a1It[0]);
+		assert.equal(tradeObject.sender, accounts[1], "Trade sender has not changed");
+		assert.equal(tradeObject.recipient, accounts[0], "Trade recipient has not changed");
+	});
 
 });
 
