@@ -1,2 +1,2 @@
-### The PDF can't be viewed in the browser for some reason. 
-Click the download button to see the raw PDF
+### The PDF contains a summary of the project 
+Please click [here](https://github.com/Kalzak/ColoredGrids/blob/main/coloredGrids.pdf) to view the project summary.
