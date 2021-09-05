@@ -131,9 +131,9 @@ contract ColoredGrids is ERC721, Ownable {
 			if(ownedTokensTemp[i] == tokenId) {
 				found = true;
 				if(ownedTokensTemp.length == 1) {
-					ownedTokensTemp[i] = ownedTokensTemp[ownedTokensTemp.length - 1];
 					ownedTokensTemp.pop();
 				} else {
+					ownedTokensTemp[i] = ownedTokensTemp[ownedTokensTemp.length - 1];
 					ownedTokensTemp.pop();
 				}
 			}
