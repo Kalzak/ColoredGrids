@@ -161,6 +161,28 @@ contract("GridTrading", (accounts) => {
 		a1It = await getIncomingTrades(instance, accounts[1]);
 		assert.equal(a1It.length, 0, "Declining the trade offer did not remove the trade");
 	});
+	
+	it("sendTradeOffer with a subgrid swaps the subgrid data", async() => {
+		const instance = await GridTrading.deployed();
+		// Get tokenIds for grids on accounts
+		let a0T = await getOwnedTokens(instance, accounts[0]);
+		let a1T = await getOwnedTokens(instance, accounts[1]);
+		// Start a trade for subgrid identifier 11
+		await instance.sendTradeOffer(accounts[1], 11, a0T[0], a1T[0], {from: accounts[0]});
+		// Get the tradeId
+		let a1It = await getIncomingTrades(instance, accounts[1]);
+		// Get the current subgrid data for each grid
+		let a0T0_prev = await instance.getSubgridData(a0T[0], 11); 
+		let a1T0_prev = await instance.getSubgridData(a1T[0], 11);
+		// Accept the trade
+		await instance.acceptTradeOffer(a1It[0], {from: accounts[1]});
+		// Get the new subgrid data for each grid
+		let a0T0_new = await instance.getSubgridData(a0T[0], 11); 
+		let a1T0_new = await instance.getSubgridData(a1T[0], 11);
+		// Check if the data has been swapped
+		assert.equal(a0T0_prev.toString(), a1T0_new.toString(), "Subgrid data was not swapped");
+		assert.equal(a1T0_prev.toString(), a0T0_new.toString(), "Subgrid data was not swapped");
+	});
 
 	it("counterTradeOffer changes the trade", async() => {
 		const instance = await GridTrading.deployed();
@@ -177,6 +199,7 @@ contract("GridTrading", (accounts) => {
 		let tradeObject = await instance.getTradeDetails(a1It[0]);
 		assert.equal(tradeObject.sender, accounts[1], "Trade sender has not changed");
 		assert.equal(tradeObject.recipient, accounts[0], "Trade recipient has not changed");
+		// Remove trade to cleanup for next test
 	});
 
 });
