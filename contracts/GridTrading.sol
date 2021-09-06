@@ -36,6 +36,18 @@ contract GridTrading is ColoredGrids {
 		string memory symbol_
 	) ColoredGrids(name_, symbol_) {}
 
+	// Event for a tradeOffer being sent
+	event tradeOfferSent(address sender, address recipient, uint8 subgridId, uint256 senderGrid, uint256 recipientGrid);
+
+	// Event for tradeOffer being accepted
+	event tradeOfferAccepted(address sender, address recipient);
+
+	// Event for tradeOffer being declined
+	event tradeOfferDeclined(address sender, address recipient);
+
+	// Event for tradeOffer being withdrawn
+	event tradeOfferWithdraw(address sender, address recipient);
+
 	/**
 	 * @dev Sends a trade offer. If subgridId is set to 0 then it is a grid trade. Otherwise it is a subgrid trade
 	 */
@@ -61,6 +73,8 @@ contract GridTrading is ColoredGrids {
 		incomingTrades[recipient].push(tradeId);
 		// Add trade to the trades mapping
 		trades[tradeId] = newTrade;
+		// Emit event
+		emit tradeOfferSent(msg.sender, recipient, subgridId, senderGrid, recipientGrid);
 	}
 
 	/**
@@ -73,6 +87,8 @@ contract GridTrading is ColoredGrids {
 		// Check that msg.sender is the creator of the trade
 		require(msg.sender == tradeObject.sender, "You are not the creator of the trade");
 		_removeTradeOffer(tradeId);
+		// Emit event
+		emit tradeOfferWithdraw(tradeObject.sender, tradeObject.recipient);
 	}
 
 	function _removeTradeOffer(uint256 tradeId) internal {
@@ -146,6 +162,7 @@ contract GridTrading is ColoredGrids {
 				if(validSubgridIds[i] == subgridId) {
 					subgridIdIsValid = true;
 				}
+				i++;
 			}
 			require(subgridIdIsValid = true, "SubgridId provided is invalid");
 			// Load subgridData
@@ -163,6 +180,8 @@ contract GridTrading is ColoredGrids {
 		removeTradeByTokenId(getOutgoingTrades(tradeObject.sender), tradeObject.senderGrid);
 		removeTradeByTokenId(getIncomingTrades(tradeObject.recipient), tradeObject.recipientGrid);
 		removeTradeByTokenId(getOutgoingTrades(tradeObject.recipient), tradeObject.recipientGrid);
+		// Emit event
+		emit tradeOfferAccepted(tradeObject.sender, tradeObject.recipient);
 	}
 	
 	/**
@@ -189,6 +208,8 @@ contract GridTrading is ColoredGrids {
 		tradeObject.senderOffer = newOfferValue;
 		tradeObject.recipient = tradeObject.sender;
 		tradeObject.sender = msg.sender;
+		// Emit event
+		emit tradeOfferSent(msg.sender, tradeObject.recipient, tradeObject.subgridId, tradeObject.senderGrid, tradeObject.recipientGrid);
 	}
 
 	/**
@@ -200,6 +221,8 @@ contract GridTrading is ColoredGrids {
 		// Check that msg.sender is the creator of the trade
 		require(msg.sender == tradeObject.recipient, "You are not the recipient of the trade");
 		_removeTradeOffer(tradeId);
+		// Emit event
+		emit tradeOfferDeclined(tradeObject.sender, tradeObject.recipient);
 	}
 
 	/**
