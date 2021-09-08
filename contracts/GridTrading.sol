@@ -53,19 +53,13 @@ contract GridTrading is ColoredGrids {
 	function sendTradeOffer(address recipient, uint8 subgridId, uint256 senderGrid, uint256 recipientGrid) public payable {
 		// Generate the tradeId
 		uint256 tradeId = uint256(keccak256(abi.encodePacked(msg.sender, recipient)));
+		// Load the senders outgoing trades
+		uint256[] storage senderOutgoingTrades = outgoingTrades[msg.sender];
+		// Check that there is not an existing trade send to the same recipient
+		(,bool found) = _findMatchingIndex(senderOutgoingTrades, tradeId);
+		require(found == false, "You already have a pending trade to this address");
 		// Create the trade object
 		Trade memory newTrade = Trade(tradeId, msg.sender, recipient, subgridId, senderGrid, recipientGrid, msg.value);
-		// Check that there is not an existing trade send to the same recipient
-		uint256[] storage senderOutgoingTrades = outgoingTrades[msg.sender];
-		uint256 i = 0;
-		bool existingTrade = false;
-		while(i < senderOutgoingTrades.length && existingTrade == false) {
-			if(senderOutgoingTrades[i] == tradeId) {
-				existingTrade = true;
-			}
-			i++;
-		}
-		require(existingTrade == false, "You already have a pending trade to this address");
 		// Add the trade object to the senders outgoing trade array
 		senderOutgoingTrades.push(tradeId);
 		// Add the trade object to the recipients incoming trade array
@@ -88,50 +82,6 @@ contract GridTrading is ColoredGrids {
 		_removeTradeOffer(tradeId);
 		// Emit event
 		emit tradeOfferWithdraw(tradeObject.sender, tradeObject.recipient);
-	}
-
-	function _removeTradeOffer(uint256 tradeId) internal {
-		// Get the trade object
-		Trade memory tradeObject = trades[tradeId];
-		// Remove the trade from the recipients address
-		bool deleted = removeTradeFromArray(incomingTrades[tradeObject.recipient], tradeId);
-		// Ensure that the tradeId was deleted
-		require(deleted == true, "Trade does not exist in recipient array");
-		// Remove the trade from the senders address
-		deleted = removeTradeFromArray(outgoingTrades[tradeObject.sender], tradeId);
-		// Ensure that the tradeId was deleted
-		require(deleted == true, "Trade does not exist in sender array");
-		// Remove trade from trades mapping
-		delete trades[tradeId];
-		// Return ether to the user
-		(bool sent,) = payable(msg.sender).call{value: tradeObject.senderOffer}("");
-	}
-
-	/**
-	 * @dev Removes an element that contains tradeId in the array and shuffled the array
-	 * @param array The array to have data removed from
-	 * @param tradeId The trade ID to be removed
-	 */
-	function removeTradeFromArray(uint256[] storage array, uint256 tradeId) internal returns (bool) {
-		bool found = false;
-		uint256 i = 0;
-		// Iterate through each item in the array until the tradeId is found
-		while(i < array.length && found == false) {
-			if(array[i] == tradeId) {
-				found = true;
-				// If the array is size 1 then just pop
-				if(array.length == 1) {
-					array.pop();
-				// Otherwise move the last element into its place and pop
-				} else {
-					array[i] = array[array.length - 1];
-					array.pop();
-				}
-			}	
-			i++;
-		}
-		// Return whether the item has been deleted
-		return found;
 	}
 
 	/**
@@ -173,12 +123,12 @@ contract GridTrading is ColoredGrids {
 		}
 		_removeTradeOffer(tradeId);
 		// Settle ether payments
-		(bool sent,) = payable(tradeObject.recipient).call{value: tradeObject.senderOffer}("");
+		payable(tradeObject.recipient).call{value: tradeObject.senderOffer}("");
 		// Cancel all incoming/outgoing trades that depend on a grid that was involved in this trade 
-		removeTradeByTokenId(getIncomingTrades(tradeObject.sender), tradeObject.senderGrid);
-		removeTradeByTokenId(getOutgoingTrades(tradeObject.sender), tradeObject.senderGrid);
-		removeTradeByTokenId(getIncomingTrades(tradeObject.recipient), tradeObject.recipientGrid);
-		removeTradeByTokenId(getOutgoingTrades(tradeObject.recipient), tradeObject.recipientGrid);
+		_removeTradeByTokenId(getIncomingTrades(tradeObject.sender), tradeObject.senderGrid);
+		_removeTradeByTokenId(getOutgoingTrades(tradeObject.sender), tradeObject.senderGrid);
+		_removeTradeByTokenId(getIncomingTrades(tradeObject.recipient), tradeObject.recipientGrid);
+		_removeTradeByTokenId(getOutgoingTrades(tradeObject.recipient), tradeObject.recipientGrid);
 		// Emit event
 		emit tradeOfferAccepted(tradeObject.sender, tradeObject.recipient);
 	}
@@ -189,21 +139,13 @@ contract GridTrading is ColoredGrids {
 	 * @param newOfferValue The new amount of ether that the initial trade sender has to offer
 	 */
 	function sendCounterTrade(uint256 tradeId, uint256 newOfferValue) public {
-		// Find the trade in the users incomingTrades
-		uint256 i = 0;
-		bool found = false;
-		uint256[] storage incomingTradesTemp = incomingTrades[msg.sender];
-		while(i < incomingTradesTemp.length && found == false) {
-			if(incomingTradesTemp[i] == tradeId) {
-				found = true;
-			} else {
-				i++;	
-			}
-		}
-		require(found == true, "Given tradeId is not in your list of incomingTrades");
+		// A user can only send a counter trade if they are the recipient of a trade
+		(,bool found) = _findMatchingIndex(incomingTrades[msg.sender], tradeId);
+		require(found == true, "Given tradeId is not in your list of incomingTrades");	
+		// Require that the new offer amount is higher than the existing offer amount
 		Trade storage tradeObject = trades[tradeId];
-		// Require that the new offeramount is higher than the existing offer amount
 		require(newOfferValue > tradeObject.senderOffer, "You cannot change the offer to be less than the original amount");
+		// Set the new offer value
 		tradeObject.senderOffer = newOfferValue;
 		// Emit event
 		emit tradeOfferSent(msg.sender, tradeObject.recipient, tradeObject.subgridId, tradeObject.senderGrid, tradeObject.recipientGrid);
@@ -222,23 +164,84 @@ contract GridTrading is ColoredGrids {
 		emit tradeOfferDeclined(tradeObject.sender, tradeObject.recipient);
 	}
 
+	function _removeTradeOffer(uint256 tradeId) internal {
+		// Get the trade object
+		Trade memory tradeObject = trades[tradeId];
+		// Remove the trade from the recipients address
+		bool deleted = _removeTradeFromArray(incomingTrades[tradeObject.recipient], tradeId);
+		// Ensure that the tradeId was deleted
+		require(deleted == true, "Trade does not exist in recipient array");
+		// Remove the trade from the senders address
+		deleted = _removeTradeFromArray(outgoingTrades[tradeObject.sender], tradeId);
+		// Ensure that the tradeId was deleted
+		require(deleted == true, "Trade does not exist in sender array");
+		// Remove trade from trades mapping
+		delete trades[tradeId];
+		// Return ether to the user
+		payable(msg.sender).call{value: tradeObject.senderOffer}("");
+	}
+
 	/**
-	 * @dev Looks through an array of trade IDs and deletes the trade if it contains tokenId as a senderGrid or recipientGrid
-	 * @param tradeList An array of trades IDs
-	 * @param tradeId The target token ID to be removed
+	 * @dev Removes all trades in the array tradeList that involve the grid token `gridId`
+	 * @param tradeList An array of trade IDs
+	 * @param gridId The target grid ID that needs to be removed
 	 */
-	function removeTradeByTokenId(uint256[] memory tradeList, uint256 tradeId) internal {
+	function _removeTradeByTokenId(uint256[] memory tradeList, uint256 gridId) internal {
 		uint i;
 		// For every tradeId in the array tradeList
 		for(i = 0; i < tradeList.length; i++) {
 			// Load the trade object
 			Trade memory tradeObject = getTradeDetails(tradeList[i]);
 			// Check if the trade contains tokenId as a senderGrid or recieverGrid
-			if(tradeObject.senderGrid == tradeId || tradeObject.recipientGrid == tradeId) {
+			if(tradeObject.senderGrid == gridId || tradeObject.recipientGrid == gridId) {
 				// Remove the trade
 				_removeTradeOffer(tradeList[i]);
 			}
 		}
+	}
+
+	/**
+	 * @dev Removes an element that contains tradeId in the array and shuffled the array
+	 * @param array The array to have data removed from
+	 * @param tradeId The trade ID to be removed
+	 */
+	function _removeTradeFromArray(uint256[] storage array, uint256 tradeId) internal returns (bool) {
+		// Find the trade in the array
+		(uint256 index, bool found) = _findMatchingIndex(array, tradeId);
+		// If the array only has one item then pop
+		if(array.length == 1) {
+			array.pop();
+		} else {
+			array[index] = array[array.length - 1];
+			array.pop();
+		}
+		return found; 
+	}
+
+	/**
+	 * @dev Finds the index in a uint256 array where the contents match `target`. 
+	 * @param array The array to be searched
+	 * @param target The content that is being searched for
+	 * @return -1 if no match, otherwise the matching index
+	 */
+	function _findMatchingIndex(uint256[] storage array, uint256 target) internal view returns (uint256, bool){
+		// int256 to allow for -1 in the case of no match
+		uint256 i = 0;
+		bool found = false;
+		if(array.length > 0) {
+			// For every value in the array
+			while(i < array.length && found == false) {
+				// If the array contents match `target`
+				if(array[i] == target) {
+					// Set found to true to exit the loop
+					found = true;
+				}
+				i++;
+			}
+			// Decrement i to account for the extra increment at the end of the loop
+			i--;
+		}	
+		return (i, found);
 	}
 
 	/**
