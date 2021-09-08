@@ -11,8 +11,7 @@ contract GridTrading is ColoredGrids {
 		address sender;
 		// Recpient of the offer
 		address recipient;
-		// The ID of the subgrid to be traded
-		// If subgridId is 0 then it is a grid trade
+		// The ID of the subgrid to be traded, if 0 then it's a grid trade
 		uint8 subgridId;
 		// The token ID of the senders grid
 		uint256 senderGrid;
@@ -206,8 +205,6 @@ contract GridTrading is ColoredGrids {
 		// Require that the new offeramount is higher than the existing offer amount
 		require(newOfferValue > tradeObject.senderOffer, "You cannot change the offer to be less than the original amount");
 		tradeObject.senderOffer = newOfferValue;
-		tradeObject.recipient = tradeObject.sender;
-		tradeObject.sender = msg.sender;
 		// Emit event
 		emit tradeOfferSent(msg.sender, tradeObject.recipient, tradeObject.subgridId, tradeObject.senderGrid, tradeObject.recipientGrid);
 	}

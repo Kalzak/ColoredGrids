@@ -193,13 +193,19 @@ contract("GridTrading", (accounts) => {
 		await instance.sendTradeOffer(accounts[1], 0, a0T[0], a1T[0], {from: accounts[0]});
 		// Get the tradeId
 		let a1It = await getIncomingTrades(instance, accounts[1]);
+		// Get the trade object before change
+		let tradeObject = await instance.getTradeDetails(a1It[0]);
+		// Get ether offered for trade before
+		let etherBefore = tradeObject.senderOffer;
 		// Have the recipient send a counterOffer
 		await instance.sendCounterTrade(a1It[0], '100000000000000000', {from: accounts[1]});
-		// Get the trade object
-		let tradeObject = await instance.getTradeDetails(a1It[0]);
-		assert.equal(tradeObject.sender, accounts[1], "Trade sender has not changed");
-		assert.equal(tradeObject.recipient, accounts[0], "Trade recipient has not changed");
+		// Get the trade object after change
+		tradeObject = await instance.getTradeDetails(a1It[0]);
+		// Get ether offered for trade after
+		let etherAfter = tradeObject.senderOffer;
+		assert.notEqual(etherBefore, etherAfter, "Ether amount offered does not change on countertrade");	
 		// Remove trade to cleanup for next test
+		await instance.declineTradeOffer(a1It[0], {from: accounts[1]});
 	});
 
 });
