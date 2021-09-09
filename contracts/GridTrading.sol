@@ -19,6 +19,8 @@ contract GridTrading is ColoredGrids {
 	        uint256 recipientGrid;
 		// The amount of ether (if any) being offered by the sender
 		uint256 senderOffer;
+		// Boolean to track if counter trade
+		bool counterTrade;
 	}
 
 	// Mapping from an address to an array of active incoming trade IDs
@@ -57,9 +59,9 @@ contract GridTrading is ColoredGrids {
 		uint256[] storage senderOutgoingTrades = outgoingTrades[msg.sender];
 		// Check that there is not an existing trade send to the same recipient
 		(,bool found) = _findMatchingIndex(senderOutgoingTrades, tradeId);
-		require(found == false, "You already have a pending trade to this address");
+		require(found == false, "There is existing trade to recpient");
 		// Create the trade object
-		Trade memory newTrade = Trade(tradeId, msg.sender, recipient, subgridId, senderGrid, recipientGrid, msg.value);
+		Trade memory newTrade = Trade(tradeId, msg.sender, recipient, subgridId, senderGrid, recipientGrid, msg.value, false);
 		// Add the trade object to the senders outgoing trade array
 		senderOutgoingTrades.push(tradeId);
 		// Add the trade object to the recipients incoming trade array
@@ -78,7 +80,7 @@ contract GridTrading is ColoredGrids {
 		// Get the trade object
 		Trade memory tradeObject = trades[tradeId];
 		// Check that msg.sender is the creator of the trade
-		require(msg.sender == tradeObject.sender, "You are not the creator of the trade");
+		require(msg.sender == tradeObject.sender, "Not trade creator");
 		_removeTradeOffer(tradeId);
 		// Emit event
 		emit tradeOfferWithdraw(tradeObject.sender, tradeObject.recipient);
@@ -90,8 +92,14 @@ contract GridTrading is ColoredGrids {
 	function acceptTradeOffer(uint256 tradeId) public {
 		// Get the trade object
 		Trade memory tradeObject = trades[tradeId];
-		// Check that msg.sender is the recipient of the trade
-		require(tradeObject.recipient == msg.sender, "msg.sender is not the recipient of the trade");
+		// If the trade is not a countertrade
+		if(tradeObject.counterTrade == false) {
+			tradeObject.counterTrade = true;
+			require(msg.sender == tradeObject.recipient);
+		} else {
+			tradeObject.counterTrade = false;
+			require(msg.sender == tradeObject.sender);
+		}
 		// Different logic if it is a grid trade or a subgrid trade
 		if(tradeObject.subgridId == 0) {
 			// Exchange grids
@@ -113,7 +121,7 @@ contract GridTrading is ColoredGrids {
 				}
 				i++;
 			}
-			require(subgridIdIsValid = true, "SubgridId provided is invalid");
+			require(subgridIdIsValid = true, "SubgridId invalid");
 			// Load subgridData
 			uint8[2] memory senderSubgridData = getSubgridData(tradeObject.senderGrid, subgridId);
 			uint8[2] memory recipientSubgridData = getSubgridData(tradeObject.recipientGrid, subgridId);
@@ -139,12 +147,16 @@ contract GridTrading is ColoredGrids {
 	 * @param newOfferValue The new amount of ether that the initial trade sender has to offer
 	 */
 	function sendCounterTrade(uint256 tradeId, uint256 newOfferValue) public {
-		// A user can only send a counter trade if they are the recipient of a trade
-		(,bool found) = _findMatchingIndex(incomingTrades[msg.sender], tradeId);
-		require(found == true, "Given tradeId is not in your list of incomingTrades");	
-		// Require that the new offer amount is higher than the existing offer amount
+		// Load the trade
 		Trade storage tradeObject = trades[tradeId];
-		require(newOfferValue > tradeObject.senderOffer, "You cannot change the offer to be less than the original amount");
+		// If the trade is not a countertrade
+		if(tradeObject.counterTrade == false) {
+			require(msg.sender == tradeObject.recipient, "a");
+			tradeObject.counterTrade = true;
+		} else {
+			require(msg.sender == tradeObject.sender);
+			tradeObject.counterTrade = false;
+		}
 		// Set the new offer value
 		tradeObject.senderOffer = newOfferValue;
 		// Emit event
@@ -158,7 +170,7 @@ contract GridTrading is ColoredGrids {
 		// Get the trade object
 		Trade memory tradeObject = trades[tradeId];
 		// Check that msg.sender is the creator of the trade
-		require(msg.sender == tradeObject.recipient, "You are not the recipient of the trade");
+		require(msg.sender == tradeObject.recipient, "You are not trade recipient");
 		_removeTradeOffer(tradeId);
 		// Emit event
 		emit tradeOfferDeclined(tradeObject.sender, tradeObject.recipient);
@@ -170,11 +182,11 @@ contract GridTrading is ColoredGrids {
 		// Remove the trade from the recipients address
 		bool deleted = _removeTradeFromArray(incomingTrades[tradeObject.recipient], tradeId);
 		// Ensure that the tradeId was deleted
-		require(deleted == true, "Trade does not exist in recipient array");
+		require(deleted == true, "Trade not in recipient array");
 		// Remove the trade from the senders address
 		deleted = _removeTradeFromArray(outgoingTrades[tradeObject.sender], tradeId);
 		// Ensure that the tradeId was deleted
-		require(deleted == true, "Trade does not exist in sender array");
+		require(deleted == true, "Trade not in sender array");
 		// Remove trade from trades mapping
 		delete trades[tradeId];
 		// Return ether to the user

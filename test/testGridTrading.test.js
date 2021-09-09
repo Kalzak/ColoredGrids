@@ -208,6 +208,26 @@ contract("GridTrading", (accounts) => {
 		await instance.declineTradeOffer(a1It[0], {from: accounts[1]});
 	});
 
+	it("acceptTradeOffer does not allow a trade recipient to counter trade and then accept", async() => {
+		const instance = await GridTrading.deployed();
+		// Get tokenId for grids on accounts
+		let a0T = await getOwnedTokens(instance, accounts[0]);
+		let a1T = await getOwnedTokens(instance, accounts[1]);
+		// Start a trade
+		await instance.sendTradeOffer(accounts[1], 0, a0T[0], a1T[0], {from: accounts[0], value: 10000});
+		// account1 offers a counter trade
+		let a1It = await getIncomingTrades(instance, accounts[1]);
+			
+		let tradeDeets = await instance.getTradeDetails(a1It[0]);
+		console.log(tradeDeets);
+		console.log("acc0 " + accounts[0]);
+		console.log("acc1 " +accounts[1]);
+
+		await instance.sendCounterTrade(a1It[0], '100000000000000000', {from: accounts[1]});
+		// Accept the trade, expecting a revert 
+		const truffleAssert = require('truffle-assertions');
+		await truffleAssert.reverts(instance.acceptTradeOffer(a1It[0], {from: accounts[1]}), "revert");
+	});
 });
 
 async function getOwnedTokens(instance, account) {
