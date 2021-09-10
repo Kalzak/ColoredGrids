@@ -52,14 +52,18 @@ contract GridTrading is ColoredGrids {
 	/**
 	 * @dev Sends a trade offer. If subgridId is set to 0 then it is a grid trade. Otherwise it is a subgrid trade
 	 */
-	function sendTradeOffer(address recipient, uint8 subgridId, uint256 senderGrid, uint256 recipientGrid) public payable {
+	function sendTrade(address recipient, uint8 subgridId, uint256 senderGrid, uint256 recipientGrid) public payable {
 		// Generate the tradeId
 		uint256 tradeId = uint256(keccak256(abi.encodePacked(msg.sender, recipient)));
 		// Load the senders outgoing trades
 		uint256[] storage senderOutgoingTrades = outgoingTrades[msg.sender];
 		// Check that there is not an existing trade send to the same recipient
 		(,bool found) = _findMatchingIndex(senderOutgoingTrades, tradeId);
-		require(found == false, "There is existing trade to recpient");
+		require(found == false, "Trade to recipient already exists");
+		// If the trade is for a subgrid, check if the given subgrid ID is valid
+		if(subgridId != 0) {
+			require(subgridIdIsValid(subgridId), "Invalid subgrid");	
+		}	
 		// Create the trade object
 		Trade memory newTrade = Trade(tradeId, msg.sender, recipient, subgridId, senderGrid, recipientGrid, msg.value, false);
 		// Add the trade object to the senders outgoing trade array
@@ -73,10 +77,23 @@ contract GridTrading is ColoredGrids {
 	}
 
 	/**
+	 * @dev Declines a trade offer
+	 */
+	function declineTrade(uint256 tradeId) public {
+		// Get the trade object
+		Trade memory tradeObject = trades[tradeId];
+		// Check that msg.sender is the creator of the trade
+		require(msg.sender == tradeObject.recipient, "You are not trade recipient");
+		_removeTradeOffer(tradeId);
+		// Emit event
+		emit tradeOfferDeclined(tradeObject.sender, tradeObject.recipient);
+	}
+
+	/**
 	 * @dev An address that has sent a trade offer is able to withdraw the trade with this function
 	 * @param tradeId the ID of the trade that is to be withdrawn
 	 */
-	function withdrawTradeOffer(uint256 tradeId) public {
+	function withdrawTrade(uint256 tradeId) public {
 		// Get the trade object
 		Trade memory tradeObject = trades[tradeId];
 		// Check that msg.sender is the creator of the trade
@@ -89,7 +106,7 @@ contract GridTrading is ColoredGrids {
 	/**
 	 * @dev Accepts a trade and exchanges grids/subgrids/ether
 	 */
-	function acceptTradeOffer(uint256 tradeId) public {
+	function acceptTrade(uint256 tradeId) public {
 		// Get the trade object
 		Trade memory tradeObject = trades[tradeId];
 		// If the trade is not a countertrade
@@ -110,19 +127,8 @@ contract GridTrading is ColoredGrids {
 			_addTokenToAddress(tradeObject.sender, tradeObject.recipientGrid);
 			_addTokenToAddress(tradeObject.recipient, tradeObject.senderGrid);
 		} else {
-			uint8 subgridId = tradeObject.subgridId;
-			// Make sure that the subgridId is valid
-			bool subgridIdIsValid = false;
-			uint8[9] memory validSubgridIds = [6,7,8,10,11,12,14,15,16];
-			uint i = 0;
-			while(i < validSubgridIds.length && subgridIdIsValid == false) {
-				if(validSubgridIds[i] == subgridId) {
-					subgridIdIsValid = true;
-				}
-				i++;
-			}
-			require(subgridIdIsValid = true, "SubgridId invalid");
 			// Load subgridData
+			uint8 subgridId = tradeObject.subgridId;
 			uint8[2] memory senderSubgridData = getSubgridData(tradeObject.senderGrid, subgridId);
 			uint8[2] memory recipientSubgridData = getSubgridData(tradeObject.recipientGrid, subgridId);
 			// Swap subgrids
@@ -140,13 +146,13 @@ contract GridTrading is ColoredGrids {
 		// Emit event
 		emit tradeOfferAccepted(tradeObject.sender, tradeObject.recipient);
 	}
-	
+
 	/**
 	 * @dev Counters a trade offer that was sent to msg.sender by changing the eth amount
 	 * @param tradeId The trade ID of the incoming trade to be modified
 	 * @param newOfferValue The new amount of ether that the initial trade sender has to offer
 	 */
-	function sendCounterTrade(uint256 tradeId, uint256 newOfferValue) public {
+	function counterTrade(uint256 tradeId, uint256 newOfferValue) public {
 		// Load the trade
 		Trade storage tradeObject = trades[tradeId];
 		// If the trade is not a countertrade
@@ -164,18 +170,27 @@ contract GridTrading is ColoredGrids {
 	}
 
 	/**
-	 * @dev Declines a trade offer
+	 * @dev Checks if the given value is a valid subgrid ID
+	 * @param id The subgrid ID to be checked
+	 * @return Boolean to indicated whether `id` is valid
 	 */
-	function declineTradeOffer(uint256 tradeId) public {
-		// Get the trade object
-		Trade memory tradeObject = trades[tradeId];
-		// Check that msg.sender is the creator of the trade
-		require(msg.sender == tradeObject.recipient, "You are not trade recipient");
-		_removeTradeOffer(tradeId);
-		// Emit event
-		emit tradeOfferDeclined(tradeObject.sender, tradeObject.recipient);
+	function subgridIdIsValid(uint8 id) internal pure returns(bool) {
+		bool valid = false;
+		uint8[9] memory validSubgridIds = [6,7,8,10,11,12,14,15,16];
+		uint256 i = 0;
+		while(i < validSubgridIds.length && valid == false) {
+			if(id == validSubgridIds[i]) {
+				valid = true;	
+			}
+			i++;
+		}
+		return valid;
 	}
-
+		
+	/**
+	 * @dev Removes a trade from the `trades` array as well as the senders/recipients arrays
+	 * @param tradeId The trade to be removed
+	 */
 	function _removeTradeOffer(uint256 tradeId) internal {
 		// Get the trade object
 		Trade memory tradeObject = trades[tradeId];
