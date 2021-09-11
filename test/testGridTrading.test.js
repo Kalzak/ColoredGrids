@@ -166,7 +166,7 @@ contract("GridTrading", (accounts) => {
 		a1It = await getIncomingTrades(instance, accounts[1]);
 		assert.equal(a1It.length, 0, "Existing trade that had a grid tokenID dependency was not removed");
 	});
-	
+
 	it("declineTrade closes the trade", async() => {
 		const instance = await GridTrading.deployed();
 		// Get tokenIds for grids on accounts
@@ -228,21 +228,40 @@ contract("GridTrading", (accounts) => {
 		await instance.declineTrade(a1It[0], {from: accounts[1]});
 	});
 
-	it("acceptTrade does not allow a trade recipient to counter trade and then accept", async() => {
-		const instance = await GridTrading.deployed();
-		// Get tokenId for grids on accounts
+	it("acceptTrade will revert on a counter trade called by the recipient", async() => {
+		let instance = await GridTrading.deployed();
+		// Get tokenIds of accounts to build trades
 		let a0T = await getOwnedTokens(instance, accounts[0]);
 		let a1T = await getOwnedTokens(instance, accounts[1]);
-		// Start a trade
-		await instance.sendTrade(accounts[1], 0, a0T[0], a1T[0], {from: accounts[0], value: 10000});
-		// account1 offers a counter trade
+		// Construct the trade
+		await instance.sendTrade(accounts[1], 0, a0T[0], a1T[1], {from: accounts[0]});
+		// Get the incoming trade
 		let a1It = await getIncomingTrades(instance, accounts[1]);
-		let tradeDeets = await instance.getTradeDetails(a1It[0]);
-		await instance.counterTrade(a1It[0], '100000000000000000', {from: accounts[1]});
-		// Accept the trade, expecting a revert 
+		// Send a counter trade
+		await instance.counterTrade(a1It[0], 1000, {from: accounts[1]});
+		// Sender attempts to accept trade
 		const truffleAssert = require('truffle-assertions');
-		await truffleAssert.reverts(instance.acceptTrade(a1It[0], {from: accounts[1]}), "revert");
+		await truffleAssert.reverts(instance.acceptTrade(a1It[0], {from: accounts[1]}), "error");
+		// Withdraw the trade
+		instance.withdrawTrade(a1It[0], {from: accounts[0]});
 	});
+
+	it("acceptTrade will revert on a non-counter trade called by the sender", async() => {
+		let instance = await GridTrading.deployed();
+		// Get tokenIds of accounts to build trades
+		let a0T = await getOwnedTokens(instance, accounts[0]);
+		let a1T = await getOwnedTokens(instance, accounts[1]);
+		// Construct the trade
+		await instance.sendTrade(accounts[1], 0, a0T[0], a1T[1], {from: accounts[0]});
+		// Get the incoming trade
+		let a1It = await getIncomingTrades(instance, accounts[1]);
+		// Sender attempts to accept trade
+		const truffleAssert = require('truffle-assertions');
+		await truffleAssert.reverts(instance.acceptTrade(a1It[0], {from: accounts[0]}), "error");
+		// Withdraw the trade
+		instance.withdrawTrade(a1It[0], {from: accounts[0]});
+	});
+
 });
 
 async function getOwnedTokens(instance, account) {
