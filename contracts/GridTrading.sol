@@ -195,11 +195,11 @@ contract GridTrading is ColoredGrids {
 		// Get the trade object
 		Trade memory tradeObject = trades[tradeId];
 		// Remove the trade from the recipients address
-		bool deleted = _removeTradeFromArray(incomingTrades[tradeObject.recipient], tradeId);
+		bool deleted = _removeValueFromArray(incomingTrades[tradeObject.recipient], tradeId);
 		// Ensure that the tradeId was deleted
 		require(deleted == true, "Trade not in recipient array");
 		// Remove the trade from the senders address
-		deleted = _removeTradeFromArray(outgoingTrades[tradeObject.sender], tradeId);
+		deleted = _removeValueFromArray(outgoingTrades[tradeObject.sender], tradeId);
 		// Ensure that the tradeId was deleted
 		require(deleted == true, "Trade not in sender array");
 		// Remove trade from trades mapping
@@ -228,13 +228,13 @@ contract GridTrading is ColoredGrids {
 	}
 
 	/**
-	 * @dev Removes an element that contains tradeId in the array and shuffled the array
+	 * @dev Removes an element that contains targetValue in the array and shuffled the array
 	 * @param array The array to have data removed from
-	 * @param tradeId The trade ID to be removed
+	 * @param targetValue The trade ID to be removed
 	 */
-	function _removeTradeFromArray(uint256[] storage array, uint256 tradeId) internal returns (bool) {
+	function _removeValueFromArray(uint256[] storage array, uint256 targetValue) internal returns (bool) {
 		// Find the trade in the array
-		(uint256 index, bool found) = _findMatchingIndex(array, tradeId);
+		(uint256 index, bool found) = _findMatchingIndex(array, targetValue);
 		// If the array only has one item then pop
 		if(array.length == 1) {
 			array.pop();
